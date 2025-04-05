@@ -11,7 +11,7 @@
 ## v0.3.8 2025-02-11
 
 * [Add plugin util `openSetting`](https://github.com/siyuan-note/siyuan/pull/13761)
-* [Add plugin method `updateProtyleToolbar`](https://github.com/siyuan-note/plugin-sample/issues/24)
+* [Add plugin method `updateProtyleToolbar`](https://github.com/siyuan-note/siyuan-task-manager/issues/24)
 
 ## v0.3.7 2024-11-05
 
@@ -19,12 +19,12 @@
 * [Add plugin function `getAllEditor`](https://github.com/siyuan-note/siyuan/issues/12884)
 * [Add plugin function `getModelByDockType`](https://github.com/siyuan-note/siyuan/issues/11782)
 * [Replace `any` in IProtyle with the corresponding type](https://github.com/siyuan-note/petal/issues/34)
-* [Add `data-id` attribute to menu button](https://github.com/siyuan-note/plugin-sample/pull/20)
+* [Add `data-id` attribute to menu button](https://github.com/siyuan-note/siyuan-task-manager/pull/20)
 
 ## v0.3.6 2024-09-27
 
 * [Add plugin event bus `opened-notebook` & `closed-notebook`](https://github.com/siyuan-note/siyuan/issues/11974)
-* [⬆️ Bump braces from 3.0.2 to 3.0.3](https://github.com/siyuan-note/plugin-sample/pull/16)
+* [⬆️ Bump braces from 3.0.2 to 3.0.3](https://github.com/siyuan-note/siyuan-task-manager/pull/16)
 
 ## v0.3.5 2024-04-30
 
@@ -126,7 +126,7 @@
 
 ## v0.1.7
 
-* [Support build js and json](https://github.com/siyuan-note/plugin-sample/pull/8)
+* [Support build js and json](https://github.com/siyuan-note/siyuan-task-manager/pull/8)
 
 ## v0.1.6
 

@@ -1,32 +1,16 @@
 {
-  "name": "plugin-sample",
-  "author": "Vanessa",
-  "url": "https://github.com/siyuan-note/plugin-sample",
-  "version": "0.4.0",
-  "minAppVersion": "3.1.24",
-  "backends": [
-    "windows",
-    "linux",
-    "darwin",
-    "ios",
-    "android",
-    "harmony",
-    "docker"
-  ],
-  "frontends": [
-    "desktop",
-    "mobile",
-    "browser-desktop",
-    "browser-mobile",
-    "desktop-window"
-  ],
+  "name": "siyuan-task-manager",
+  "author": "YourName",
+  "url": "https://github.com/yourusername/siyuan-task-manager",
+  "version": "0.1.0",
+  "minAppVersion": "2.10.0",
   "displayName": {
-    "default": "Plugin Sample",
-    "zh_CN": "插件示例"
+    "default": "Task Manager",
+    "zh_CN": "任务管理器"
   },
   "description": {
-    "default": "This is a plugin sample",
-    "zh_CN": "这是一个插件示例"
+    "default": "Manage tasks like Logseq, with status cycling, planned/due times, and reference counting",
+    "zh_CN": "像 Logseq 一样管理任务，支持状态循环切换、计划/截止时间和引用计数"
   },
   "readme": {
     "default": "README.md",
@@ -37,11 +21,7 @@
     "patreon": "",
     "github": "",
     "custom": [
-      "https://ld246.com/sponsor"
+      "https://example.com/donate"
     ]
-  },
-  "keywords": [
-    "sample",
-    "示例"
-  ]
+  }
 }

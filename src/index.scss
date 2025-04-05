@@ -1,4 +1,4 @@
-.plugin-sample {
+.siyuan-task-manager {
   &__custom-tab {
     background-color: var(--b3-theme-background);
     height: 100%;
@@ -18,5 +18,146 @@
     background: var(--b3-card-info-background);
     border-radius: 4px;
     padding: 2px 8px;
+  }
+}
+
+
+.task-status-now {
+  background-color: rgba(255, 165, 0, 0.1);
+  border-left: 3px solid orange;
+}
+
+.task-status-later {
+  background-color: rgba(0, 0, 255, 0.1);
+  border-left: 3px solid blue;
+}
+
+.task-status-done {
+  text-decoration: line-through;
+  opacity: 0.7;
+  background-color: rgba(0, 128, 0, 0.1);
+  border-left: 3px solid green;
+}
+
+.task-priority-high {
+  .task-priority-indicator {
+    color: red;
+    font-weight: bold;
+    margin-right: 4px;
+  }
+}
+
+.task-priority-medium {
+  .task-priority-indicator {
+    color: orange;
+    font-weight: bold;
+    margin-right: 4px;
+  }
+}
+
+.task-priority-low {
+  .task-priority-indicator {
+    color: blue;
+    font-weight: bold;
+    margin-right: 4px;
+  }
+}
+
+.task-time-display {
+  font-size: 0.85em;
+  color: var(--b3-theme-on-surface);
+  margin-top: 4px;
+  padding-left: 24px;
+  
+  .task-time-label {
+    font-weight: bold;
+    margin-right: 4px;
+  }
+  
+  .task-planned-time {
+    color: var(--b3-theme-primary);
+    margin-bottom: 2px;
+  }
+  
+  .task-due-time {
+    color: var(--b3-theme-error);
+  }
+}
+
+.task-ref-count {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  background-color: var(--b3-theme-background-light);
+  border-radius: 10px;
+  padding: 0 6px;
+  font-size: 12px;
+  color: var(--b3-theme-on-surface);
+  
+  &.task-ref-count-clickable {
+    cursor: pointer;
+    background-color: var(--b3-theme-primary-lightest);
+    color: var(--b3-theme-primary);
+    
+    &:hover {
+      background-color: var(--b3-theme-primary-light);
+    }
+  }
+}
+
+.task-manager-refs {
+  padding: 16px;
+  height: 100%;
+  overflow: auto;
+  
+  &__title {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 16px;
+  }
+  
+  &__section {
+    margin-bottom: 16px;
+    
+    &-title {
+      font-size: 16px;
+      font-weight: bold;
+      margin-bottom: 8px;
+      color: var(--b3-theme-primary);
+    }
+  }
+  
+  &__item {
+    padding: 8px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    background-color: var(--b3-theme-background-light);
+    cursor: pointer;
+    
+    &:hover {
+      background-color: var(--b3-theme-hover);
+    }
+    
+    &-content {
+      margin-bottom: 4px;
+    }
+    
+    &-path {
+      font-size: 12px;
+      color: var(--b3-theme-on-surface);
+    }
+  }
+}
+
+.task-status-icon {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  vertical-align: middle;
+  
+  svg {
+    width: 100%;
+    height: 100%;
   }
 }

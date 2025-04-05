@@ -23,122 +23,136 @@ import {
 import "./index.scss";
 import {IMenuItem} from "siyuan/types";
 
-const STORAGE_NAME = "menu-config";
-const TAB_TYPE = "custom_tab";
-const DOCK_TYPE = "dock_tab";
+// 修改存储名称和类型常量
+const STORAGE_NAME = "task-manager-config";
+const TAB_TYPE = "task_manager_tab";
+const DOCK_TYPE = "task_manager_dock";
 
-export default class PluginSample extends Plugin {
+// 定义任务状态类型
+enum TaskStatus {
+    TODO = "TODO",
+    NOW = "NOW",
+    LATER = "LATER",
+    DONE = "DONE"
+}
+
+// 定义任务优先级
+enum TaskPriority {
+    HIGH = "HIGH",
+    MEDIUM = "MEDIUM",
+    LOW = "LOW"
+}
+
+// 定义任务属性
+interface TaskAttributes {
+    status: TaskStatus;
+    priority?: TaskPriority;
+    plannedTime?: string;
+    dueTime?: string;
+}
+
+export default class TaskManagerPlugin extends Plugin {
 
     private custom: () => Custom;
     private isMobile: boolean;
     private blockIconEventBindThis = this.blockIconEvent.bind(this);
+    private taskStatusCycleBindThis = this.taskStatusCycle.bind(this);
+    private loadedProtyleStaticBindThis = this.addTaskRefCounters.bind(this);
 
     updateProtyleToolbar(toolbar: Array<string | IMenuItem>) {
         toolbar.push("|");
         toolbar.push({
-            name: "insert-smail-emoji",
-            icon: "iconEmoji",
-            hotkey: "⇧⌘I",
+            name: "task-status-cycle",
+            icon: "iconCheck",
+            hotkey: "⌃⏎",
             tipPosition: "n",
-            tip: this.i18n.insertEmoji,
-            click(protyle: Protyle) {
-                protyle.insert("😊");
+            tip: this.i18n.cycleTaskStatus || "切换任务状态",
+            click: (protyle: Protyle) => {
+                this.taskStatusCycle();
             }
         });
         return toolbar;
     }
 
     onload() {
-        this.data[STORAGE_NAME] = {readonlyText: "Readonly"};
+        this.data[STORAGE_NAME] = {
+            taskDefaultPriority: "MEDIUM",
+            showTaskAttributes: true
+        };
 
         const frontEnd = getFrontend();
         this.isMobile = frontEnd === "mobile" || frontEnd === "browser-mobile";
-        // 图标的制作参见帮助文档
-        this.addIcons(`<symbol id="iconFace" viewBox="0 0 32 32">
-<path d="M13.667 17.333c0 0.92-0.747 1.667-1.667 1.667s-1.667-0.747-1.667-1.667 0.747-1.667 1.667-1.667 1.667 0.747 1.667 1.667zM20 15.667c-0.92 0-1.667 0.747-1.667 1.667s0.747 1.667 1.667 1.667 1.667-0.747 1.667-1.667-0.747-1.667-1.667-1.667zM29.333 16c0 7.36-5.973 13.333-13.333 13.333s-13.333-5.973-13.333-13.333 5.973-13.333 13.333-13.333 13.333 5.973 13.333 13.333zM14.213 5.493c1.867 3.093 5.253 5.173 9.12 5.173 0.613 0 1.213-0.067 1.787-0.16-1.867-3.093-5.253-5.173-9.12-5.173-0.613 0-1.213 0.067-1.787 0.16zM5.893 12.627c2.28-1.293 4.040-3.4 4.88-5.92-2.28 1.293-4.040 3.4-4.88 5.92zM26.667 16c0-1.040-0.16-2.040-0.44-2.987-0.933 0.2-1.893 0.32-2.893 0.32-4.173 0-7.893-1.92-10.347-4.92-1.4 3.413-4.187 6.093-7.653 7.4 0.013 0.053 0 0.12 0 0.187 0 5.88 4.787 10.667 10.667 10.667s10.667-4.787 10.667-10.667z"></path>
-</symbol>
-<symbol id="iconSaving" viewBox="0 0 32 32">
-<path d="M20 13.333c0-0.733 0.6-1.333 1.333-1.333s1.333 0.6 1.333 1.333c0 0.733-0.6 1.333-1.333 1.333s-1.333-0.6-1.333-1.333zM10.667 12h6.667v-2.667h-6.667v2.667zM29.333 10v9.293l-3.76 1.253-2.24 7.453h-7.333v-2.667h-2.667v2.667h-7.333c0 0-3.333-11.28-3.333-15.333s3.28-7.333 7.333-7.333h6.667c1.213-1.613 3.147-2.667 5.333-2.667 1.107 0 2 0.893 2 2 0 0.28-0.053 0.533-0.16 0.773-0.187 0.453-0.347 0.973-0.427 1.533l3.027 3.027h2.893zM26.667 12.667h-1.333l-4.667-4.667c0-0.867 0.12-1.72 0.347-2.547-1.293 0.333-2.347 1.293-2.787 2.547h-8.227c-2.573 0-4.667 2.093-4.667 4.667 0 2.507 1.627 8.867 2.68 12.667h2.653v-2.667h8v2.667h2.68l2.067-6.867 3.253-1.093v-4.707z"></path>
-</symbol>`);
+        
+        // 添加任务状态图标
+        this.addIcons(`<symbol id="iconTaskNow" viewBox="0 0 32 32">
+            <path d="M16 3.594c-6.844 0-12.406 5.562-12.406 12.406 0 6.844 5.562 12.406 12.406 12.406 6.844 0 12.406-5.562 12.406-12.406 0-6.844-5.562-12.406-12.406-12.406zM16 5.375c5.875 0 10.625 4.75 10.625 10.625 0 5.875-4.75 10.625-10.625 10.625-5.875 0-10.625-4.75-10.625-10.625 0-5.875 4.75-10.625 10.625-10.625zM14.344 9.375v8.656h8.656v-1.781h-6.875v-6.875z"></path>
+        </symbol>
+        <symbol id="iconTaskLater" viewBox="0 0 32 32">
+            <path d="M16 3.594c-6.844 0-12.406 5.562-12.406 12.406 0 6.844 5.562 12.406 12.406 12.406 6.844 0 12.406-5.562 12.406-12.406 0-6.844-5.562-12.406-12.406-12.406zM16 5.375c5.875 0 10.625 4.75 10.625 10.625 0 5.875-4.75 10.625-10.625 10.625-5.875 0-10.625-4.75-10.625-10.625 0-5.875 4.75-10.625 10.625-10.625zM16 9.375c-0.5 0-0.875 0.375-0.875 0.875v5.75h-5.75c-0.5 0-0.875 0.375-0.875 0.875s0.375 0.875 0.875 0.875h6.625c0.5 0 0.875-0.375 0.875-0.875v-6.625c0-0.5-0.375-0.875-0.875-0.875z"></path>
+        </symbol>
+        <symbol id="iconTaskDone" viewBox="0 0 32 32">
+            <path d="M16 3.594c-6.844 0-12.406 5.562-12.406 12.406 0 6.844 5.562 12.406 12.406 12.406 6.844 0 12.406-5.562 12.406-12.406 0-6.844-5.562-12.406-12.406-12.406zM16 5.375c5.875 0 10.625 4.75 10.625 10.625 0 5.875-4.75 10.625-10.625 10.625-5.875 0-10.625-4.75-10.625-10.625 0-5.875 4.75-10.625 10.625-10.625zM21.719 11.25l-7.438 7.438-4-4-1.281 1.281 5.281 5.281 8.719-8.719z"></path>
+        </symbol>
+        <symbol id="iconCheck" viewBox="0 0 32 32">
+            <path d="M28 6.667l-16 16-8-8 2.667-2.667 5.333 5.333 13.333-13.333z"></path>
+        </symbol>`);
 
+        // 添加顶部栏图标
         const topBarElement = this.addTopBar({
-            icon: "iconFace",
-            title: this.i18n.addTopBarIcon,
+            icon: "iconCheck",
+            title: this.i18n.taskManager || "任务管理器",
             position: "right",
             callback: () => {
                 if (this.isMobile) {
-                    this.addMenu();
+                    this.addTaskMenu();
                 } else {
                     let rect = topBarElement.getBoundingClientRect();
-                    // 如果被隐藏，则使用更多按钮
                     if (rect.width === 0) {
                         rect = document.querySelector("#barMore").getBoundingClientRect();
                     }
                     if (rect.width === 0) {
                         rect = document.querySelector("#barPlugins").getBoundingClientRect();
                     }
-                    this.addMenu(rect);
+                    this.addTaskMenu(rect);
                 }
             }
         });
 
-        const statusIconTemp = document.createElement("template");
-        statusIconTemp.innerHTML = `<div class="toolbar__item ariaLabel" aria-label="Remove plugin-sample Data">
-    <svg>
-        <use xlink:href="#iconTrashcan"></use>
-    </svg>
-</div>`;
-        statusIconTemp.content.firstElementChild.addEventListener("click", () => {
-            confirm("⚠️", this.i18n.confirmRemove.replace("${name}", this.name), () => {
-                this.removeData(STORAGE_NAME).then(() => {
-                    this.data[STORAGE_NAME] = {readonlyText: "Readonly"};
-                    showMessage(`[${this.name}]: ${this.i18n.removedData}`);
-                });
-            });
-        });
-
-        this.addStatusBar({
-            element: statusIconTemp.content.firstElementChild as HTMLElement,
-        });
-
-        this.custom = this.addTab({
-            type: TAB_TYPE,
-            init() {
-                this.element.innerHTML = `<div class="plugin-sample__custom-tab">${this.data.text}</div>`;
-            },
-            beforeDestroy() {
-                console.log("before destroy tab:", TAB_TYPE);
-            },
-            destroy() {
-                console.log("destroy tab:", TAB_TYPE);
-            }
-        });
-
+        // 添加任务状态切换命令
         this.addCommand({
-            langKey: "showDialog",
-            hotkey: "⇧⌘O",
+            langKey: "cycleTaskStatus",
+            hotkey: "⌃⏎",
             callback: () => {
-                this.showDialog();
+                this.taskStatusCycle();
             },
         });
 
+        // 添加任务面板命令
         this.addCommand({
-            langKey: "getTab",
-            hotkey: "⇧⌘M",
-            globalCallback: () => {
-                console.log(this.getOpenedTab());
+            langKey: "openTaskPanel",
+            hotkey: "⌥⌘T",
+            callback: () => {
+                this.openTaskPanel();
             },
         });
+
+        // 监听文档加载事件，用于添加任务引用计数
+        this.eventBus.on("loaded-protyle-static", this.loadedProtyleStaticBindThis);
+        
+        // 监听块图标点击事件
+        this.eventBus.on("click-blockicon", this.blockIconEventBindThis);
+
+        // 添加任务管理面板
         this.addDock({
             config: {
-                position: "LeftBottom",
-                size: {width: 200, height: 0},
-                icon: "iconSaving",
-                title: "Custom Dock",
-                hotkey: "⌥⌘W",
+                position: "RightBottom",
+                size: {width: 300, height: 0},
+                icon: "iconCheck",
+                title: this.i18n.taskManager || "任务管理器",
+                hotkey: "⌥⌘T",
             },
             data: {
-                text: "This is my custom dock"
+                tasks: []
             },
             type: DOCK_TYPE,
             resize() {
@@ -148,166 +162,616 @@ export default class PluginSample extends Plugin {
                 console.log(DOCK_TYPE + " update");
             },
             init: (dock) => {
-                if (this.isMobile) {
-                    dock.element.innerHTML = `<div class="toolbar toolbar--border toolbar--dark">
-    <svg class="toolbar__icon"><use xlink:href="#iconEmoji"></use></svg>
-        <div class="toolbar__text">Custom Dock</div>
-    </div>
-    <div class="fn__flex-1 plugin-sample__custom-dock">
-        ${dock.data.text}
-    </div>
-</div>`;
-                } else {
-                    dock.element.innerHTML = `<div class="fn__flex-1 fn__flex-column">
-    <div class="block__icons">
-        <div class="block__logo">
-            <svg class="block__logoicon"><use xlink:href="#iconEmoji"></use></svg>Custom Dock
-        </div>
-        <span class="fn__flex-1 fn__space"></span>
-        <span data-type="min" class="block__icon b3-tooltips b3-tooltips__sw" aria-label="Min ${adaptHotkey("⌘W")}"><svg><use xlink:href="#iconMin"></use></svg></span>
-    </div>
-    <div class="fn__flex-1 plugin-sample__custom-dock">
-        ${dock.data.text}
-    </div>
-</div>`;
-                }
+                this.initTaskDock(dock);
             },
             destroy() {
                 console.log("destroy dock:", DOCK_TYPE);
             }
         });
 
-        const textareaElement = document.createElement("textarea");
+        // 设置面板
+        const showAttributesElement = document.createElement("input");
+        showAttributesElement.type = "checkbox";
         this.setting = new Setting({
             confirmCallback: () => {
-                this.saveData(STORAGE_NAME, {readonlyText: textareaElement.value});
+                this.saveData(STORAGE_NAME, {
+                    taskDefaultPriority: this.data[STORAGE_NAME].taskDefaultPriority,
+                    showTaskAttributes: showAttributesElement.checked
+                });
             }
         });
+        
         this.setting.addItem({
-            title: "Readonly text",
-            direction: "row",
-            description: "Open plugin url in browser",
+            title: this.i18n.showTaskAttributes || "显示任务属性",
+            description: this.i18n.showTaskAttributesDesc || "在任务块下方显示计划时间和截止时间",
             createActionElement: () => {
-                textareaElement.className = "b3-text-field fn__block";
-                textareaElement.placeholder = "Readonly text in the menu";
-                textareaElement.value = this.data[STORAGE_NAME].readonlyText;
-                return textareaElement;
+                showAttributesElement.className = "b3-switch fn__flex-center";
+                showAttributesElement.checked = this.data[STORAGE_NAME].showTaskAttributes !== false;
+                return showAttributesElement;
             },
         });
-        const btnaElement = document.createElement("button");
-        btnaElement.className = "b3-button b3-button--outline fn__flex-center fn__size200";
-        btnaElement.textContent = "Open";
-        btnaElement.addEventListener("click", () => {
-            window.open("https://github.com/siyuan-note/plugin-sample");
-        });
-        this.setting.addItem({
-            title: "Open plugin url",
-            description: "Open plugin url in browser",
-            actionElement: btnaElement,
-        });
 
-        this.protyleSlash = [{
-            filter: ["insert emoji 😊", "插入表情 😊", "crbqwx"],
-            html: `<div class="b3-list-item__first"><span class="b3-list-item__text">${this.i18n.insertEmoji}</span><span class="b3-list-item__meta">😊</span></div>`,
-            id: "insertEmoji",
-            callback(protyle: Protyle, nodeElement: HTMLElement) {
-                protyle.insert("😊");
-            }
-        }];
-
-        this.protyleOptions = {
-            toolbar: ["block-ref",
-                "a",
-                "|",
-                "text",
-                "strong",
-                "em",
-                "u",
-                "s",
-                "mark",
-                "sup",
-                "sub",
-                "clear",
-                "|",
-                "code",
-                "kbd",
-                "tag",
-                "inline-math",
-                "inline-memo",
-            ],
-        };
-
-        console.log(this.i18n.helloPlugin);
+        console.log(this.i18n.helloPlugin || "任务管理器插件已加载");
     }
 
     onLayoutReady() {
         this.loadData(STORAGE_NAME);
-        console.log(`frontend: ${getFrontend()}; backend: ${getBackend()}`);
+        // 初始化所有已打开文档中的任务
+        this.initAllTasks();
     }
 
     onunload() {
-        console.log(this.i18n.byePlugin);
+        // 移除事件监听
+        this.eventBus.off("loaded-protyle-static", this.loadedProtyleStaticBindThis);
+        this.eventBus.off("click-blockicon", this.blockIconEventBindThis);
+        console.log(this.i18n.byePlugin || "任务管理器插件已卸载");
     }
 
-    uninstall() {
-        console.log("uninstall");
+    // 初始化所有任务
+    private async initAllTasks() {
+        const editors = getAllEditor();
+        for (const editor of editors) {
+            const protyle = editor.protyle;
+            if (!protyle) continue;
+            
+            // 查找所有任务块
+            const taskBlocks = protyle.element.querySelectorAll('[data-type="i"] .protyle-action--task');
+            
+            for (const taskBlock of taskBlocks) {
+                const blockElement = taskBlock.closest("[data-node-id]");
+                if (!blockElement) continue;
+                
+                const blockId = blockElement.getAttribute("data-node-id");
+                if (!blockId) continue;
+                
+                // 获取引用计数
+                const refCount = await this.getBlockRefCount(blockId);
+                
+                // 添加引用计数显示
+                this.addRefCountDisplay(blockElement, blockId, refCount);
+                
+                // 更新任务属性显示
+                this.updateTaskAttributesDisplay(blockElement, blockId);
+            }
+        }
     }
 
-    async updateCards(options: ICardData) {
-        options.cards.sort((a: ICard, b: ICard) => {
-            if (a.blockID < b.blockID) {
-                return -1;
+    // 初始化任务面板
+    private async initTaskDock(dock: any) {
+        if (this.isMobile) {
+            dock.element.innerHTML = `<div class="toolbar toolbar--border toolbar--dark">
+    <svg class="toolbar__icon"><use xlink:href="#iconCheck"></use></svg>
+        <div class="toolbar__text">${this.i18n.taskManager || "任务管理器"}</div>
+    </div>
+    <div class="fn__flex-1 task-manager-dock">
+        <div class="task-manager-dock__loading">${this.i18n.loading || "加载中..."}</div>
+    </div>
+</div>`;
+        } else {
+            dock.element.innerHTML = `<div class="fn__flex-1 fn__flex-column">
+    <div class="block__icons">
+        <div class="block__logo">
+            <svg class="block__logoicon"><use xlink:href="#iconCheck"></use></svg>${this.i18n.taskManager || "任务管理器"}
+        </div>
+        <span class="fn__flex-1 fn__space"></span>
+        <span data-type="refresh" class="block__icon b3-tooltips b3-tooltips__sw" aria-label="${this.i18n.refresh || "刷新"}"><svg><use xlink:href="#iconRefresh"></use></svg></span>
+        <span data-type="min" class="block__icon b3-tooltips b3-tooltips__sw" aria-label="Min ${adaptHotkey("⌘W")}"><svg><use xlink:href="#iconMin"></use></svg></span>
+    </div>
+    <div class="fn__flex-1 task-manager-dock">
+        <div class="task-manager-dock__loading">${this.i18n.loading || "加载中..."}</div>
+    </div>
+</div>`;
+        }
+        
+        // 添加刷新按钮事件
+        const refreshButton = dock.element.querySelector('[data-type="refresh"]');
+        if (refreshButton) {
+            refreshButton.addEventListener("click", () => {
+                this.refreshTaskDock(dock);
+            });
+        }
+        
+        // 初始加载任务
+        this.refreshTaskDock(dock);
+    }
+
+    // 刷新任务面板
+    private async refreshTaskDock(dock: any) {
+        const dockContent = dock.element.querySelector(".task-manager-dock");
+        if (!dockContent) return;
+        
+        dockContent.innerHTML = `<div class="task-manager-dock__loading">${this.i18n.loading || "加载中..."}</div>`;
+        
+        try {
+            // 获取所有任务
+            const tasks = await this.getAllTasks();
+            
+            if (tasks.length === 0) {
+                dockContent.innerHTML = `<div class="task-manager-dock__empty">${this.i18n.noTasks || "没有任务"}</div>`;
+                return;
             }
-            if (a.blockID > b.blockID) {
-                return 1;
+            
+            // 按状态分组
+            const tasksByStatus = {
+                [TaskStatus.NOW]: [],
+                [TaskStatus.LATER]: [],
+                [TaskStatus.TODO]: [],
+                [TaskStatus.DONE]: []
+            };
+            
+            tasks.forEach(task => {
+                const status = task.attrs["custom-task-status"] || TaskStatus.TODO;
+                if (!tasksByStatus[status]) {
+                    tasksByStatus[status] = [];
+                }
+                tasksByStatus[status].push(task);
+            });
+            
+            // 构建HTML
+            let html = `<div class="task-manager-dock__content">`;
+            
+            // NOW 任务
+            if (tasksByStatus[TaskStatus.NOW].length > 0) {
+                html += this.buildTaskSection(TaskStatus.NOW, tasksByStatus[TaskStatus.NOW]);
             }
-            return 0;
+            
+            // LATER 任务
+            if (tasksByStatus[TaskStatus.LATER].length > 0) {
+                html += this.buildTaskSection(TaskStatus.LATER, tasksByStatus[TaskStatus.LATER]);
+            }
+            
+            // TODO 任务
+            if (tasksByStatus[TaskStatus.TODO].length > 0) {
+                html += this.buildTaskSection(TaskStatus.TODO, tasksByStatus[TaskStatus.TODO]);
+            }
+            
+            // DONE 任务
+            if (tasksByStatus[TaskStatus.DONE].length > 0) {
+                html += this.buildTaskSection(TaskStatus.DONE, tasksByStatus[TaskStatus.DONE]);
+            }
+            
+            html += `</div>`;
+            
+            dockContent.innerHTML = html;
+            
+            // 添加任务点击事件
+            const taskItems = dockContent.querySelectorAll(".task-manager-dock__task");
+            taskItems.forEach((item: Element) => {
+                item.addEventListener("click", () => {
+                    const id = item.getAttribute("data-id");
+                    if (id) {
+                        // 打开任务所在文档
+                        openTab({
+                            app: this.app,
+                            doc: {
+                                id: id
+                            }
+                        });
+                    }
+                });
+            });
+        } catch (error) {
+            console.error("刷新任务面板失败:", error);
+            dockContent.innerHTML = `<div class="task-manager-dock__error">${this.i18n.loadError || "加载失败"}</div>`;
+        }
+    }
+
+    // 构建任务分组HTML
+    private buildTaskSection(status: TaskStatus, tasks: any[]): string {
+        let statusText = status;
+        let statusClass = status.toLowerCase();
+        
+        let html = `<div class="task-manager-dock__section task-manager-dock__section--${statusClass}">
+            <div class="task-manager-dock__section-title">${statusText} (${tasks.length})</div>
+            <div class="task-manager-dock__tasks">`;
+        
+        tasks.forEach(task => {
+            const priority = task.attrs["custom-task-priority"] || "";
+            const priorityClass = priority ? `task-priority-${priority.toLowerCase()}` : "";
+            
+            html += `<div class="task-manager-dock__task ${priorityClass}" data-id="${task.id}">
+                <div class="task-manager-dock__task-content">${task.content}</div>`;
+            
+            // 添加计划时间和截止时间
+            const plannedTime = task.attrs["custom-planned-time"];
+            const dueTime = task.attrs["custom-due-time"];
+            
+            if (plannedTime || dueTime) {
+                html += `<div class="task-manager-dock__task-times">`;
+                
+                if (plannedTime) {
+                    html += `<div class="task-manager-dock__task-planned">${this.i18n.plannedTime || "计划时间"}: ${this.formatDateTime(plannedTime)}</div>`;
+                }
+                
+                if (dueTime) {
+                    html += `<div class="task-manager-dock__task-due">${this.i18n.dueTime || "截止时间"}: ${this.formatDateTime(dueTime)}</div>`;
+                }
+                
+                html += `</div>`;
+            }
+            
+            html += `</div>`;
         });
-        return options;
+        
+        html += `</div></div>`;
+        
+        return html;
     }
 
-    /* 自定义设置
-    openSetting() {
+    // 获取所有任务
+    private async getAllTasks(): Promise<any[]> {
+        try {
+            // 使用正确的SQL查询接口获取所有任务块
+            const response = await fetchPost("/api/query/sql", {
+                stmt: "SELECT * FROM blocks WHERE type='i' AND subType='t'"
+            });
+            
+            if (response.code === 0 && response.data) {
+                const tasks = [];
+                
+                for (const block of response.data) {
+                    // 获取块属性
+                    const attrs = await this.getBlockAttrs(block.id);
+                    block.attrs = attrs;
+                    tasks.push(block);
+                }
+                
+                return tasks;
+            }
+            
+            return [];
+        } catch (error) {
+            console.error("获取所有任务失败:", error);
+            return [];
+        }
+    }
+
+    // 打开任务面板
+    private openTaskPanel() {
+        try {
+            const taskDock = getModelByDockType(DOCK_TYPE);
+            if (taskDock) {
+                // 如果已经打开，刷新它
+                this.refreshTaskDock(taskDock);
+            } else {
+                // 使用插件API的showDock方法
+                try {
+                    // 尝试使用全局API
+                    const globalSiyuan = (window as any).siyuan;
+                    if (globalSiyuan && globalSiyuan.layout && typeof globalSiyuan.layout.showDock === 'function') {
+                        globalSiyuan.layout.showDock(DOCK_TYPE);
+                    } else {
+                        // 回退到使用事件触发方式
+                        this.eventBus.emit("open-dock", {type: DOCK_TYPE});
+                        
+                        // 等待一段时间后尝试刷新
+                        setTimeout(() => {
+                            try {
+                                const newTaskDock = getModelByDockType(DOCK_TYPE);
+                                if (newTaskDock) {
+                                    this.refreshTaskDock(newTaskDock);
+                                }
+                            } catch (error) {
+                                console.error("延迟获取面板失败:", error);
+                            }
+                        }, 300);
+                    }
+                } catch (e) {
+                    console.error("打开面板失败:", e);
+                    showMessage(this.i18n.errorOpeningPanel || "打开任务面板失败");
+                }
+            }
+        } catch (error) {
+            console.error("打开任务面板时出错:", error);
+            showMessage(this.i18n.errorOpeningPanel || "打开任务面板失败");
+        }
+    }
+
+    // 添加任务菜单
+    private addTaskMenu(rect?: DOMRect) {
+        const menu = new Menu("taskManagerMenu");
+        
+        menu.addItem({
+            icon: "iconCheck",
+            label: this.i18n.openTaskPanel || "打开任务面板",
+            click: () => {
+                this.openTaskPanel();
+            }
+        });
+        
+        menu.addItem({
+            icon: "iconRefresh",
+            label: this.i18n.refreshTasks || "刷新任务",
+            click: () => {
+                // Add error handling to prevent the TypeError
+                try {
+                    const taskDock = getModelByDockType(DOCK_TYPE);
+                    if (taskDock) {
+                        this.refreshTaskDock(taskDock);
+                    } else {
+                        // If dock isn't found, first open it then refresh
+                        this.openTaskPanel();
+                        // Wait a bit for the dock to initialize
+                        setTimeout(() => {
+                            try {
+                                const newTaskDock = getModelByDockType(DOCK_TYPE);
+                                if (newTaskDock) {
+                                    this.refreshTaskDock(newTaskDock);
+                                }
+                            } catch (error) {
+                                console.error("Error getting dock after delay:", error);
+                            }
+                        }, 300);
+                    }
+                } catch (error) {
+                    console.error("Error refreshing task panel:", error);
+                    // Fallback to just opening the panel
+                    this.openTaskPanel();
+                }
+            }
+        });
+        
+        menu.addSeparator();
+        
+        menu.addItem({
+            icon: "iconHelp",
+            label: this.i18n.help || "帮助",
+            click: () => {
+                this.showHelpDialog();
+            }
+        });
+        
+        // Remove duplicate code and only keep this one instance
+        if (this.isMobile) {
+            menu.fullscreen();
+        } else if (rect) {
+            menu.open({
+                x: rect.right,
+                y: rect.bottom,
+                isLeft: true,
+            });
+        } else {
+            // Fallback position if rect is not provided
+            menu.open({
+                x: window.innerWidth / 2,
+                y: window.innerHeight / 2,
+                isLeft: true,
+            });
+        }
+    }
+
+    // 显示帮助对话框
+    private showHelpDialog() {
         const dialog = new Dialog({
-            title: this.name,
-            content: `<div class="b3-dialog__content"><textarea class="b3-text-field fn__block" placeholder="readonly text in the menu"></textarea></div>
-<div class="b3-dialog__action">
-    <button class="b3-button b3-button--cancel">${this.i18n.cancel}</button><div class="fn__space"></div>
-    <button class="b3-button b3-button--text">${this.i18n.save}</button>
-</div>`,
+            title: this.i18n.taskManagerHelp || "任务管理器帮助",
+            content: `<div class="b3-dialog__content">
+                <div class="b3-typography">
+                    <h3>${this.i18n.usage || "使用方法"}</h3>
+                    <ul>
+                        <li>${this.i18n.helpCycleStatus || "按下 Ctrl+Enter 可以循环切换任务状态：TODO → NOW → LATER → DONE → TODO"}</li>
+                        <li>${this.i18n.helpSetAttributes || "右键点击任务块图标，可以设置任务状态、优先级、计划时间和截止时间"}</li>
+                        <li>${this.i18n.helpRefCount || "任务块右侧会显示引用计数，点击可以查看所有引用"}</li>
+                        <li>${this.i18n.helpTaskPanel || "通过顶部栏图标或快捷键 Alt+Cmd+T 可以打开任务面板"}</li>
+                    </ul>
+                </div>
+            </div>`,
             width: this.isMobile ? "92vw" : "520px",
         });
-        const inputElement = dialog.element.querySelector("textarea");
-        inputElement.value = this.data[STORAGE_NAME].readonlyText;
-        const btnsElement = dialog.element.querySelectorAll(".b3-button");
-        dialog.bindInput(inputElement, () => {
-            (btnsElement[1] as HTMLButtonElement).click();
-        });
-        inputElement.focus();
-        btnsElement[0].addEventListener("click", () => {
-            dialog.destroy();
-        });
-        btnsElement[1].addEventListener("click", () => {
-            this.saveData(STORAGE_NAME, {readonlyText: inputElement.value});
-            dialog.destroy();
-        });
-    }
-    */
-
-    private eventBusPaste(event: any) {
-        // 如果需异步处理请调用 preventDefault， 否则会进行默认处理
-        event.preventDefault();
-        // 如果使用了 preventDefault，必须调用 resolve，否则程序会卡死
-        event.detail.resolve({
-            textPlain: event.detail.textPlain.trim(),
-        });
     }
 
-    private eventBusLog({detail}: any) {
-        console.log(detail);
+    // 任务状态循环切换方法
+    private async taskStatusCycle() {
+        const editor = this.getEditor();
+        if (!editor) return;
+        
+        const protyle = editor.protyle;
+        const range = getSelection();
+        if (!range) return;
+        
+        // 获取当前选中的块
+        const blockElement = range.commonAncestorContainer.closest("[data-node-id]");
+        if (!blockElement) return;
+        
+        const blockId = blockElement.getAttribute("data-node-id");
+        if (!blockId) return;
+        
+        // 检查是否为任务块
+        const isTaskBlock = blockElement.querySelector('.protyle-action--task');
+        if (!isTaskBlock) {
+            showMessage(this.i18n.notTaskBlock || "当前块不是任务块");
+            return;
+        }
+        
+        // 获取块属性
+        const blockAttrs = await this.getBlockAttrs(blockId);
+        
+        // 确定当前任务状态
+        let currentStatus = blockAttrs["custom-task-status"] || TaskStatus.TODO;
+        
+        // 循环切换状态
+        let newStatus;
+        switch (currentStatus) {
+            case TaskStatus.TODO:
+                newStatus = TaskStatus.NOW;
+                break;
+            case TaskStatus.NOW:
+                newStatus = TaskStatus.LATER;
+                break;
+            case TaskStatus.LATER:
+                newStatus = TaskStatus.DONE;
+                break;
+            case TaskStatus.DONE:
+                newStatus = TaskStatus.TODO;
+                break;
+            default:
+                newStatus = TaskStatus.NOW;
+        }
+        
+        // 更新块属性
+        await this.setBlockAttrs(blockId, {"custom-task-status": newStatus});
+        
+        // 更新块内容显示
+        this.updateTaskBlockDisplay(blockElement, newStatus);
+        
+        showMessage(`${this.i18n.taskStatusUpdated || "任务状态已更新为"}: ${newStatus}`);
+    }
+    
+    // 获取块属性
+    private async getBlockAttrs(blockId: string) {
+        try {
+            const response = await fetchPost("/api/attr/getBlockAttrs", {
+                id: blockId
+            });
+            return response.data;
+        } catch (error) {
+            console.error("获取块属性失败:", error);
+            return {};
+        }
+    }
+    
+    // 设置块属性
+    private async setBlockAttrs(blockId: string, attrs: Record<string, string>) {
+        try {
+            await fetchPost("/api/attr/setBlockAttrs", {
+                id: blockId,
+                attrs: attrs
+            });
+            return true;
+        } catch (error) {
+            console.error("设置块属性失败:", error);
+            return false;
+        }
+    }
+    
+    // 更新任务块显示
+    private updateTaskBlockDisplay(blockElement: Element, status: TaskStatus) {
+        // 移除旧的状态标记
+        blockElement.classList.remove("task-status-todo", "task-status-now", "task-status-later", "task-status-done");
+        
+        // 添加新的状态标记
+        blockElement.classList.add(`task-status-${status.toLowerCase()}`);
+        
+        // 更新任务图标
+        let iconElement = blockElement.querySelector(".task-status-icon");
+        if (!iconElement) {
+            iconElement = document.createElement("span");
+            iconElement.className = "task-status-icon";
+            const contentElement = blockElement.querySelector('[contenteditable="true"]');
+            if (contentElement) {
+                contentElement.parentElement.insertBefore(iconElement, contentElement);
+            }
+        }
+        
+        // 添加新图标
+        switch (status) {
+            case TaskStatus.NOW:
+                iconElement.innerHTML = '<svg><use xlink:href="#iconTaskNow"></use></svg>';
+                break;
+            case TaskStatus.LATER:
+                iconElement.innerHTML = '<svg><use xlink:href="#iconTaskLater"></use></svg>';
+                break;
+            case TaskStatus.DONE:
+                iconElement.innerHTML = '<svg><use xlink:href="#iconTaskDone"></use></svg>';
+                break;
+            default:
+                // TODO 状态使用默认图标
+                iconElement.innerHTML = '';
+                break;
+        }
     }
 
+        // 在blockIconEvent方法中添加任务属性设置菜单
     private blockIconEvent({detail}: any) {
+        // 检查是否为任务块
+        const isTaskBlock = detail.blockElements.some((item: HTMLElement) => {
+            return item.getAttribute("data-type") === "i" && 
+                   item.querySelector(".protyle-action--task");
+        });
+        
+        if (isTaskBlock) {
+            detail.menu.addItem({
+                id: "taskManager_setStatus",
+                icon: "iconSelect",
+                label: this.i18n.setTaskStatus || "设置任务状态",
+                submenu: [
+                    {
+                        id: "taskManager_setStatusTodo",
+                        icon: "",
+                        label: "TODO",
+                        click: () => {
+                            this.setTaskStatus(detail.blockElements, TaskStatus.TODO);
+                        }
+                    },
+                    {
+                        id: "taskManager_setStatusNow",
+                        icon: "",
+                        label: "NOW",
+                        click: () => {
+                            this.setTaskStatus(detail.blockElements, TaskStatus.NOW);
+                        }
+                    },
+                    {
+                        id: "taskManager_setStatusLater",
+                        icon: "",
+                        label: "LATER",
+                        click: () => {
+                            this.setTaskStatus(detail.blockElements, TaskStatus.LATER);
+                        }
+                    },
+                    {
+                        id: "taskManager_setStatusDone",
+                        icon: "",
+                        label: "DONE",
+                        click: () => {
+                            this.setTaskStatus(detail.blockElements, TaskStatus.DONE);
+                        }
+                    }
+                ]
+            });
+            
+            detail.menu.addItem({
+                id: "taskManager_setPriority",
+                icon: "iconUp",
+                label: this.i18n.setTaskPriority || "设置任务优先级",
+                submenu: [
+                    {
+                        id: "taskManager_setPriorityHigh",
+                        icon: "",
+                        label: "高",
+                        click: () => {
+                            this.setTaskPriority(detail.blockElements, TaskPriority.HIGH);
+                        }
+                    },
+                    {
+                        id: "taskManager_setPriorityMedium",
+                        icon: "",
+                        label: "中",
+                        click: () => {
+                            this.setTaskPriority(detail.blockElements, TaskPriority.MEDIUM);
+                        }
+                    },
+                    {
+                        id: "taskManager_setPriorityLow",
+                        icon: "",
+                        label: "低",
+                        click: () => {
+                            this.setTaskPriority(detail.blockElements, TaskPriority.LOW);
+                        }
+                    }
+                ]
+            });
+            
+            detail.menu.addItem({
+                id: "taskManager_setTimes",
+                icon: "iconCalendar",
+                label: this.i18n.setTaskTimes || "设置任务时间",
+                click: () => {
+                    this.showTaskTimeDialog(detail.blockElements[0]);
+                }
+            });
+        }
+        
+        // 保留原有的移除空格功能
         detail.menu.addItem({
             id: "pluginSample_removeSpace",
             iconHTML: "",
@@ -329,540 +793,361 @@ export default class PluginSample extends Plugin {
             }
         });
     }
-
-    private showDialog() {
-        const dialog = new Dialog({
-            title: `SiYuan ${Constants.SIYUAN_VERSION}`,
-            content: `<div class="b3-dialog__content">
-    <div>appId:</div>
-    <div class="fn__hr"></div>
-    <div class="plugin-sample__time">${this.app.appId}</div>
-    <div class="fn__hr"></div>
-    <div class="fn__hr"></div>
-    <div>API demo:</div>
-    <div class="fn__hr"></div>
-    <div class="plugin-sample__time">System current time: <span id="time"></span></div>
-    <div class="fn__hr"></div>
-    <div class="fn__hr"></div>
-    <div>Protyle demo:</div>
-    <div class="fn__hr"></div>
-    <div id="protyle" style="height: 360px;"></div>
-</div>`,
-            width: this.isMobile ? "92vw" : "560px",
-            height: "540px",
-        });
-        new Protyle(this.app, dialog.element.querySelector("#protyle"), {
-            blockId: this.getEditor().protyle.block.rootID,
-        });
-        fetchPost("/api/system/currentTime", {}, (response) => {
-            dialog.element.querySelector("#time").innerHTML = new Date(response.data).toString();
-        });
+    
+    // 设置任务状态
+    private async setTaskStatus(blockElements: HTMLElement[], status: TaskStatus) {
+        for (const blockElement of blockElements) {
+            const blockId = blockElement.dataset.nodeId;
+            if (!blockId) continue;
+            
+            await this.setBlockAttrs(blockId, {"custom-task-status": status});
+            this.updateTaskBlockDisplay(blockElement, status);
+        }
+        
+        showMessage(`已将 ${blockElements.length} 个任务状态设置为: ${status}`);
     }
-
-    private addMenu(rect?: DOMRect) {
-        const menu = new Menu("topBarSample", () => {
-            console.log(this.i18n.byeMenu);
-        });
-        menu.addItem({
-            icon: "iconSettings",
-            label: "Open Setting",
-            click: () => {
-                openSetting(this.app);
+    
+    // 设置任务优先级
+    private async setTaskPriority(blockElements: HTMLElement[], priority: TaskPriority) {
+        for (const blockElement of blockElements) {
+            const blockId = blockElement.dataset.nodeId;
+            if (!blockId) continue;
+            
+            await this.setBlockAttrs(blockId, {"custom-task-priority": priority});
+            
+            // 更新优先级显示
+            this.updateTaskPriorityDisplay(blockElement, priority);
+        }
+        
+        showMessage(`已将 ${blockElements.length} 个任务优先级设置为: ${priority}`);
+    }
+    
+    // 更新任务优先级显示
+    private updateTaskPriorityDisplay(blockElement: HTMLElement, priority: TaskPriority) {
+        // 移除旧的优先级标记
+        blockElement.classList.remove("task-priority-high", "task-priority-medium", "task-priority-low");
+        
+        // 添加新的优先级标记
+        blockElement.classList.add(`task-priority-${priority.toLowerCase()}`);
+        
+        // 更新优先级图标或标记
+        let priorityElement = blockElement.querySelector(".task-priority-indicator");
+        if (!priorityElement) {
+            priorityElement = document.createElement("span");
+            priorityElement.className = "task-priority-indicator";
+            const contentElement = blockElement.querySelector('[contenteditable="true"]');
+            if (contentElement) {
+                contentElement.parentElement.insertBefore(priorityElement, contentElement);
             }
-        });
-        menu.addItem({
-            icon: "iconDrag",
-            label: "Open Attribute Panel",
-            click: () => {
-                openAttributePanel({
-                    nodeElement: this.getEditor().protyle.wysiwyg.element.firstElementChild as HTMLElement,
-                    protyle: this.getEditor().protyle,
-                    focusName: "custom",
+        }
+        
+        // 添加新图标
+        switch (priority) {
+            case TaskPriority.HIGH:
+                priorityElement.textContent = "!!!";
+                break;
+            case TaskPriority.MEDIUM:
+                priorityElement.textContent = "!!";
+                break;
+            case TaskPriority.LOW:
+                priorityElement.textContent = "!";
+                break;
+        }
+    }
+    
+    // 显示任务时间设置对话框
+    private showTaskTimeDialog(blockElement: HTMLElement) {
+        const blockId = blockElement.dataset.nodeId;
+        if (!blockId) return;
+        
+        this.getBlockAttrs(blockId).then(attrs => {
+            const plannedTime = attrs["custom-planned-time"] || "";
+            const dueTime = attrs["custom-due-time"] || "";
+            
+            const dialog = new Dialog({
+                title: this.i18n.setTaskTimes || "设置任务时间",
+                content: `<div class="b3-dialog__content">
+                    <div class="b3-form__item">
+                        <label for="plannedTime">${this.i18n.plannedTime || "计划时间"}</label>
+                        <input class="b3-text-field fn__flex-1" id="plannedTime" type="datetime-local" value="${plannedTime}">
+                    </div>
+                    <div class="b3-form__item">
+                        <label for="dueTime">${this.i18n.dueTime || "截止时间"}</label>
+                        <input class="b3-text-field fn__flex-1" id="dueTime" type="datetime-local" value="${dueTime}">
+                    </div>
+                </div>
+                <div class="b3-dialog__action">
+                    <button class="b3-button b3-button--cancel">${this.i18n.cancel || "取消"}</button>
+                    <div class="fn__space"></div>
+                    <button class="b3-button b3-button--text">${this.i18n.confirm || "确定"}</button>
+                </div>`,
+                width: this.isMobile ? "92vw" : "520px",
+            });
+            
+            const btnsElement = dialog.element.querySelectorAll(".b3-button");
+            btnsElement[0].addEventListener("click", () => {
+                dialog.destroy();
+            });
+            
+            btnsElement[1].addEventListener("click", () => {
+                const plannedTimeInput = dialog.element.querySelector("#plannedTime") as HTMLInputElement;
+                const dueTimeInput = dialog.element.querySelector("#dueTime") as HTMLInputElement;
+                
+                const newPlannedTime = plannedTimeInput.value;
+                const newDueTime = dueTimeInput.value;
+                
+                // 设置任务时间属性
+                this.setBlockAttrs(blockId, {
+                    "custom-planned-time": newPlannedTime,
+                    "custom-due-time": newDueTime
+                }).then(() => {
+                    // 更新任务时间显示
+                    this.updateTaskTimeDisplay(blockElement, newPlannedTime, newDueTime);
+                    showMessage(this.i18n.taskTimesUpdated || "任务时间已更新");
                 });
-            }
+                
+                dialog.destroy();
+            });
         });
-        menu.addItem({
-            icon: "iconInfo",
-            label: "Dialog(open doc first)",
-            accelerator: this.commands[0].customHotkey,
-            click: () => {
-                this.showDialog();
-            }
-        });
-        menu.addItem({
-            icon: "iconFocus",
-            label: "Select Opened Doc(open doc first)",
-            click: () => {
-                (getModelByDockType("file") as Files).selectItem(this.getEditor().protyle.notebookId, this.getEditor().protyle.path);
-            }
-        });
-        if (!this.isMobile) {
-            menu.addItem({
-                icon: "iconFace",
-                label: "Open Custom Tab",
-                click: () => {
-                    const tab = openTab({
-                        app: this.app,
-                        custom: {
-                            icon: "iconFace",
-                            title: "Custom Tab",
-                            data: {
-                                text: platformUtils.isHuawei() ? "Hello, Huawei!" : "This is my custom tab",
-                            },
-                            id: this.name + TAB_TYPE
-                        },
-                    });
-                    console.log(tab);
-                }
-            });
-            menu.addItem({
-                icon: "iconImage",
-                label: "Open Asset Tab(First open the Chinese help document)",
-                click: () => {
-                    const tab = openTab({
-                        app: this.app,
-                        asset: {
-                            path: "assets/paragraph-20210512165953-ag1nib4.svg"
-                        }
-                    });
-                    console.log(tab);
-                }
-            });
-            menu.addItem({
-                icon: "iconFile",
-                label: "Open Doc Tab(open doc first)",
-                click: async () => {
-                    const tab = await openTab({
-                        app: this.app,
-                        doc: {
-                            id: this.getEditor().protyle.block.rootID,
-                        }
-                    });
-                    console.log(tab);
-                }
-            });
-            menu.addItem({
-                icon: "iconSearch",
-                label: "Open Search Tab",
-                click: () => {
-                    const tab = openTab({
-                        app: this.app,
-                        search: {
-                            k: "SiYuan"
-                        }
-                    });
-                    console.log(tab);
-                }
-            });
-            menu.addItem({
-                icon: "iconRiffCard",
-                label: "Open Card Tab",
-                click: () => {
-                    const tab = openTab({
-                        app: this.app,
-                        card: {
-                            type: "all"
-                        }
-                    });
-                    console.log(tab);
-                }
-            });
-            menu.addItem({
-                icon: "iconLayout",
-                label: "Open Float Layer(open doc first)",
-                click: () => {
-                    this.addFloatLayer({
-                        refDefs: [{refID: this.getEditor().protyle.block.rootID}],
-                        x: window.innerWidth - 768 - 120,
-                        y: 32,
-                        isBacklink: false
-                    });
-                }
-            });
-            menu.addItem({
-                icon: "iconOpenWindow",
-                label: "Open Doc Window(open doc first)",
-                click: () => {
-                    openWindow({
-                        doc: {id: this.getEditor().protyle.block.rootID}
-                    });
-                }
-            });
-        } else {
-            menu.addItem({
-                icon: "iconFile",
-                label: "Open Doc(open doc first)",
-                click: () => {
-                    openMobileFileById(this.app, this.getEditor().protyle.block.rootID);
-                }
-            });
+    }
+    
+    // 更新任务时间显示
+    private updateTaskTimeDisplay(blockElement: HTMLElement, plannedTime: string, dueTime: string) {
+        // 查找或创建任务时间显示区域
+        let timeDisplayElement = blockElement.querySelector(".task-time-display");
+        if (!timeDisplayElement) {
+            timeDisplayElement = document.createElement("div");
+            timeDisplayElement.className = "task-time-display";
+            blockElement.appendChild(timeDisplayElement);
         }
-        menu.addItem({
-            icon: "iconLock",
-            label: "Lockscreen",
-            click: () => {
-                lockScreen(this.app);
-            }
-        });
-        menu.addItem({
-            icon: "iconQuit",
-            label: "Exit Application",
-            click: () => {
-                exitSiYuan();
-            }
-        });
-        menu.addItem({
-            icon: "iconScrollHoriz",
-            label: "Event Bus",
-            type: "submenu",
-            submenu: [{
-                icon: "iconSelect",
-                label: "On ws-main",
-                click: () => {
-                    this.eventBus.on("ws-main", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off ws-main",
-                click: () => {
-                    this.eventBus.off("ws-main", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On click-blockicon",
-                click: () => {
-                    this.eventBus.on("click-blockicon", this.blockIconEventBindThis);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off click-blockicon",
-                click: () => {
-                    this.eventBus.off("click-blockicon", this.blockIconEventBindThis);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On click-pdf",
-                click: () => {
-                    this.eventBus.on("click-pdf", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off click-pdf",
-                click: () => {
-                    this.eventBus.off("click-pdf", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On click-editorcontent",
-                click: () => {
-                    this.eventBus.on("click-editorcontent", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off click-editorcontent",
-                click: () => {
-                    this.eventBus.off("click-editorcontent", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On click-editortitleicon",
-                click: () => {
-                    this.eventBus.on("click-editortitleicon", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off click-editortitleicon",
-                click: () => {
-                    this.eventBus.off("click-editortitleicon", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On click-flashcard-action",
-                click: () => {
-                    this.eventBus.on("click-flashcard-action", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off click-flashcard-action",
-                click: () => {
-                    this.eventBus.off("click-flashcard-action", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On open-noneditableblock",
-                click: () => {
-                    this.eventBus.on("open-noneditableblock", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off open-noneditableblock",
-                click: () => {
-                    this.eventBus.off("open-noneditableblock", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On loaded-protyle-static",
-                click: () => {
-                    this.eventBus.on("loaded-protyle-static", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off loaded-protyle-static",
-                click: () => {
-                    this.eventBus.off("loaded-protyle-static", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On loaded-protyle-dynamic",
-                click: () => {
-                    this.eventBus.on("loaded-protyle-dynamic", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off loaded-protyle-dynamic",
-                click: () => {
-                    this.eventBus.off("loaded-protyle-dynamic", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On switch-protyle",
-                click: () => {
-                    this.eventBus.on("switch-protyle", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off switch-protyle",
-                click: () => {
-                    this.eventBus.off("switch-protyle", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On destroy-protyle",
-                click: () => {
-                    this.eventBus.on("destroy-protyle", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off destroy-protyle",
-                click: () => {
-                    this.eventBus.off("destroy-protyle", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On open-menu-doctree",
-                click: () => {
-                    this.eventBus.on("open-menu-doctree", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off open-menu-doctree",
-                click: () => {
-                    this.eventBus.off("open-menu-doctree", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On open-menu-blockref",
-                click: () => {
-                    this.eventBus.on("open-menu-blockref", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off open-menu-blockref",
-                click: () => {
-                    this.eventBus.off("open-menu-blockref", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On open-menu-fileannotationref",
-                click: () => {
-                    this.eventBus.on("open-menu-fileannotationref", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off open-menu-fileannotationref",
-                click: () => {
-                    this.eventBus.off("open-menu-fileannotationref", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On open-menu-tag",
-                click: () => {
-                    this.eventBus.on("open-menu-tag", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off open-menu-tag",
-                click: () => {
-                    this.eventBus.off("open-menu-tag", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On open-menu-link",
-                click: () => {
-                    this.eventBus.on("open-menu-link", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off open-menu-link",
-                click: () => {
-                    this.eventBus.off("open-menu-link", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On open-menu-image",
-                click: () => {
-                    this.eventBus.on("open-menu-image", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off open-menu-image",
-                click: () => {
-                    this.eventBus.off("open-menu-image", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On open-menu-av",
-                click: () => {
-                    this.eventBus.on("open-menu-av", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off open-menu-av",
-                click: () => {
-                    this.eventBus.off("open-menu-av", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On open-menu-content",
-                click: () => {
-                    this.eventBus.on("open-menu-content", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off open-menu-content",
-                click: () => {
-                    this.eventBus.off("open-menu-content", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On open-menu-breadcrumbmore",
-                click: () => {
-                    this.eventBus.on("open-menu-breadcrumbmore", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off open-menu-breadcrumbmore",
-                click: () => {
-                    this.eventBus.off("open-menu-breadcrumbmore", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On open-menu-inbox",
-                click: () => {
-                    this.eventBus.on("open-menu-inbox", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off open-menu-inbox",
-                click: () => {
-                    this.eventBus.off("open-menu-inbox", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On input-search",
-                click: () => {
-                    this.eventBus.on("input-search", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off input-search",
-                click: () => {
-                    this.eventBus.off("input-search", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On paste",
-                click: () => {
-                    this.eventBus.on("paste", this.eventBusPaste);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off paste",
-                click: () => {
-                    this.eventBus.off("paste", this.eventBusPaste);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On open-siyuan-url-plugin",
-                click: () => {
-                    this.eventBus.on("open-siyuan-url-plugin", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off open-siyuan-url-plugin",
-                click: () => {
-                    this.eventBus.off("open-siyuan-url-plugin", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On open-siyuan-url-block",
-                click: () => {
-                    this.eventBus.on("open-siyuan-url-block", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off open-siyuan-url-block",
-                click: () => {
-                    this.eventBus.off("open-siyuan-url-block", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On opened-notebook",
-                click: () => {
-                    this.eventBus.on("opened-notebook", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off opened-notebook",
-                click: () => {
-                    this.eventBus.off("opened-notebook", this.eventBusLog);
-                }
-            }, {
-                icon: "iconSelect",
-                label: "On closed-notebook",
-                click: () => {
-                    this.eventBus.on("closed-notebook", this.eventBusLog);
-                }
-            }, {
-                icon: "iconClose",
-                label: "Off closed-notebook",
-                click: () => {
-                    this.eventBus.off("closed-notebook", this.eventBusLog);
-                }
-            }]
-        });
-        menu.addSeparator();
-        menu.addItem({
-            icon: "iconSparkles",
-            label: this.data[STORAGE_NAME].readonlyText || "Readonly",
-            type: "readonly",
-        });
-        if (this.isMobile) {
-            menu.fullscreen();
-        } else {
-            menu.open({
-                x: rect.right,
-                y: rect.bottom,
-                isLeft: true,
-            });
+        
+        // 清空现有内容
+        timeDisplayElement.innerHTML = "";
+        
+        // 添加计划时间显示
+        if (plannedTime) {
+            const plannedElement = document.createElement("div");
+            plannedElement.className = "task-planned-time";
+            plannedElement.innerHTML = `<span class="task-time-label">${this.i18n.plannedTime || "计划时间"}:</span> ${this.formatDateTime(plannedTime)}`;
+            timeDisplayElement.appendChild(plannedElement);
+        }
+        
+        // 添加截止时间显示
+        if (dueTime) {
+            const dueElement = document.createElement("div");
+            dueElement.className = "task-due-time";
+            dueElement.innerHTML = `<span class="task-time-label">${this.i18n.dueTime || "截止时间"}:</span> ${this.formatDateTime(dueTime)}`;
+            timeDisplayElement.appendChild(dueElement);
         }
     }
-
+    
+    // 格式化日期时间显示
+    private formatDateTime(dateTimeString: string): string {
+        if (!dateTimeString) return "";
+        
+        try {
+            const date = new Date(dateTimeString);
+            return date.toLocaleString();
+        } catch (e) {
+            return dateTimeString;
+        }
+    }
+    
+    // 添加任务引用计数器
+    private async addTaskRefCounters(event: any) {
+        const protyle = event.detail.protyle;
+        if (!protyle) return;
+        
+        // 查找所有任务块
+        const taskBlocks = protyle.element.querySelectorAll('[data-type="i"] .protyle-action--task');
+        
+        for (const taskBlock of taskBlocks) {
+            const blockElement = taskBlock.closest("[data-node-id]");
+            if (!blockElement) continue;
+            
+            const blockId = blockElement.getAttribute("data-node-id");
+            if (!blockId) continue;
+            
+            // 获取引用计数
+            const refCount = await this.getBlockRefCount(blockId);
+            
+            // 添加引用计数显示
+            this.addRefCountDisplay(blockElement, blockId, refCount);
+            
+            // 更新任务属性显示
+            this.updateTaskAttributesDisplay(blockElement, blockId);
+        }
+    }
+    
+    // 获取块引用计数
+    private async getBlockRefCount(blockId: string): Promise<number> {
+        try {
+            const response = await fetchPost("/api/ref/getBacklink", {
+                id: blockId
+            });
+            
+            if (response.code === 0 && response.data) {
+                // 计算引用数量
+                let count = 0;
+                if (response.data.backlinks) {
+                    count += response.data.backlinks.length;
+                }
+                if (response.data.mentions) {
+                    count += response.data.mentions.length;
+                }
+                return count;
+            }
+            
+            return 0;
+        } catch (error) {
+            console.error("获取块引用计数失败:", error);
+            return 0;
+        }
+    }
+    
+    // 添加引用计数显示
+    private addRefCountDisplay(blockElement: Element, blockId: string, refCount: number) {
+        // 查找或创建引用计数显示元素
+        let refCountElement = blockElement.querySelector(".task-ref-count");
+        if (!refCountElement) {
+            refCountElement = document.createElement("span");
+            refCountElement.className = "task-ref-count";
+            blockElement.appendChild(refCountElement);
+        }
+        
+        // 设置引用计数
+        refCountElement.textContent = refCount > 0 ? `${refCount}` : "";
+        
+        // 如果有引用，添加点击事件
+        if (refCount > 0) {
+            refCountElement.classList.add("task-ref-count-clickable");
+            refCountElement.addEventListener("click", (event) => {
+                event.stopPropagation();
+                this.showBlockReferences(blockId);
+            });
+        } else {
+            refCountElement.classList.remove("task-ref-count-clickable");
+            // 移除所有事件监听器
+            const newElement = refCountElement.cloneNode(true);
+            refCountElement.parentNode.replaceChild(newElement, refCountElement);
+        }
+    }
+    
+    // 显示块引用
+    private async showBlockReferences(blockId: string) {
+        try {
+            // 打开引用面板
+            openTab({
+                app: this.app,
+                custom: {
+                    icon: "iconLink",
+                    title: this.i18n.blockReferences || "块引用",
+                    data: {
+                        blockId: blockId
+                    },
+                    id: `task-manager-refs-${blockId}`
+                }
+            });
+            
+            // 获取引用数据
+            const response = await fetchPost("/api/ref/getBacklink", {
+                id: blockId
+            });
+            
+            if (response.code === 0 && response.data) {
+                // 在自定义面板中显示引用
+                const customTab = document.querySelector(`#task-manager-refs-${blockId}`);
+                if (customTab) {
+                    let html = `<div class="fn__flex-column task-manager-refs">
+                        <div class="b3-typography task-manager-refs__title">${this.i18n.blockReferences || "块引用"}</div>`;
+                    
+                    // 添加反向链接
+                    if (response.data.backlinks && response.data.backlinks.length > 0) {
+                        html += `<div class="task-manager-refs__section">
+                            <div class="task-manager-refs__section-title">${this.i18n.backlinks || "反向链接"}</div>`;
+                        
+                        response.data.backlinks.forEach((link: any) => {
+                            html += `<div class="task-manager-refs__item" data-id="${link.id}">
+                                <div class="task-manager-refs__item-content">${link.content}</div>
+                                <div class="task-manager-refs__item-path">${link.path}</div>
+                            </div>`;
+                        });
+                        
+                        html += `</div>`;
+                    }
+                    
+                    // 添加提及
+                    if (response.data.mentions && response.data.mentions.length > 0) {
+                        html += `<div class="task-manager-refs__section">
+                            <div class="task-manager-refs__section-title">${this.i18n.mentions || "提及"}</div>`;
+                        
+                        response.data.mentions.forEach((mention: any) => {
+                            html += `<div class="task-manager-refs__item" data-id="${mention.id}">
+                                <div class="task-manager-refs__item-content">${mention.content}</div>
+                                <div class="task-manager-refs__item-path">${mention.path}</div>
+                            </div>`;
+                        });
+                        
+                        html += `</div>`;
+                    }
+                    
+                    html += `</div>`;
+                    
+                    customTab.innerHTML = html;
+                    
+                    // 添加点击事件，点击引用项跳转到对应块
+                    const refItems = customTab.querySelectorAll(".task-manager-refs__item");
+                    refItems.forEach((item: Element) => {
+                        item.addEventListener("click", () => {
+                            const id = item.getAttribute("data-id");
+                            if (id) {
+                                // 打开引用的块
+                                openTab({
+                                    app: this.app,
+                                    doc: {
+                                        id: id
+                                    }
+                                });
+                            }
+                        });
+                    });
+                }
+            }
+        } catch (error) {
+            console.error("显示块引用失败:", error);
+            showMessage(this.i18n.failedToShowReferences || "无法显示引用");
+        }
+    }
+    
+    // 更新任务属性显示
+    private async updateTaskAttributesDisplay(blockElement: Element, blockId: string) {
+        // 获取任务属性
+        const attrs = await this.getBlockAttrs(blockId);
+        
+        // 获取任务状态、优先级和时间
+        const status = attrs["custom-task-status"] || TaskStatus.TODO;
+        const priority = attrs["custom-task-priority"] || TaskPriority.MEDIUM;
+        const plannedTime = attrs["custom-planned-time"] || "";
+        const dueTime = attrs["custom-due-time"] || "";
+        
+        // 更新任务状态显示
+        this.updateTaskBlockDisplay(blockElement, status as TaskStatus);
+        
+        // 更新任务优先级显示
+        this.updateTaskPriorityDisplay(blockElement as HTMLElement, priority as TaskPriority);
+        
+        // 更新任务时间显示
+        if (this.data[STORAGE_NAME].showTaskAttributes !== false) {
+            this.updateTaskTimeDisplay(blockElement as HTMLElement, plannedTime, dueTime);
+        }
+    }
+    
+    // 获取当前编辑器
     private getEditor() {
         const editors = getAllEditor();
         if (editors.length === 0) {
-            showMessage("please open doc first");
-            return;
+            showMessage(this.i18n.openDocFirst || "请先打开文档");
+            return null;
         }
         return editors[0];
     }

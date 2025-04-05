@@ -1,4 +1,4 @@
-[English](https://github.com/siyuan-note/plugin-sample/blob/main/README.md)
+[English](https://github.com/siyuan-note/siyuan-task-manager/blob/main/README.md)
 
 # 思源笔记插件示例
 
@@ -39,9 +39,9 @@
 
 ```json
 {
-  "name": "plugin-sample",
+  "name": "siyuan-task-manager",
   "author": "Vanessa",
-  "url": "https://github.com/siyuan-note/plugin-sample",
+  "url": "https://github.com/siyuan-note/siyuan-task-manager",
   "version": "0.1.3",
   "minAppVersion": "2.8.8",
   "backends": ["windows", "linux", "darwin"],
@@ -124,7 +124,7 @@
 ## 上架集市
 
 * 执行 `pnpm run build` 生成 package.zip
-* 在 GitHub 上创建一个新的发布，使用插件版本号作为 “Tag version”，示例 https://github.com/siyuan-note/plugin-sample/releases
+* 在 GitHub 上创建一个新的发布，使用插件版本号作为 “Tag version”，示例 https://github.com/siyuan-note/siyuan-task-manager/releases
 * 上传 package.zip 作为二进制附件
 * 提交发布
 
@@ -164,3 +164,41 @@ PR 社区集市仓库。
 
 * 如果调用了 `/api/filetree/createDailyNote` 创建日记，那么文档会自动添加这个属性，无需开发者特别处理
 * 如果是开发者代码手动创建文档（例如使用 `createDocWithMd` API 创建日记），请手动为文档添加该属性
+
+# 思源笔记任务管理器
+
+一个模仿 Logseq 任务管理功能的思源笔记插件。
+
+## 功能
+
+1. **任务状态循环**: 按下 Ctrl+Enter 可以循环切换任务状态（TODO → NOW → LATER → DONE → TODO）
+2. **任务属性**: 为任务添加计划时间、截止时间和优先级
+3. **属性显示**: 在任务块下方显示任务属性
+4. **引用计数**: 在任务块右侧显示引用计数，点击可以查看所有引用
+
+## 使用方法
+
+### 任务状态
+
+- 按下 `Ctrl+Enter` 可以循环切换任务状态
+- 右键点击任务块图标，选择"设置任务状态"可以直接设置状态
+
+### 任务优先级
+
+右键点击任务块图标，选择"设置任务优先级"可以设置任务优先级（高、中、低）
+
+### 任务时间
+
+右键点击任务块图标，选择"设置任务时间"可以设置计划时间和截止时间
+
+### 任务面板
+
+点击顶部栏的任务管理器图标或按下 `Alt+Cmd+T` 可以打开任务面板，面板中按状态分组显示所有任务
+
+## 设置
+
+- **显示任务属性**: 切换是否在任务块下方显示计划时间和截止时间
+
+## 许可证
+
+MIT
